@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件管理</title>
+    <style>
+        /* 基本样式重置 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f4f6f9;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #4a4a4a;
+        }
+
+        h2 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+            color: #4a4a4a;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 5px;
+        }
+
+        #uploadForm {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #uploadForm input[type="file"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+
+        #uploadForm button {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        #uploadForm button:hover {
+            background-color: #0056b3;
+        }
+
+        #uploadResult,
+        #result,
+        #pageInfo {
+            margin-top: 10px;
+            text-align: center;
+            color: #777;
+        }
+
+        #fileList {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .file-list li {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s;
+        }
+
+        .file-list li:nth-child(odd) {
+            background-color: #f9f9f9;
+        }
+
+        .file-list li:hover {
+            background-color: #f1f1f1;
+        }
+
+        .file-list li a {
+            color: #007bff;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .file-list li a:hover {
+            color: #0056b3;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+        }
+
+        .pagination button {
+            padding: 8px 12px;
+            margin: 0 5px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .pagination button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background-color: #0056b3;
+        }
+
+        .batch-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+
+        .batch-controls button {
+            padding: 10px 15px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .batch-controls button:hover {
+            background-color: #5a6268;
+        }
+
+        .batch-controls button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>文件管理</h1>
+
+    <!-- 上传表单 -->
+    <h2>上传文件</h2>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <label for="fileInput" style="flex: 1;">选择文件：</label>
+        <input type="file" id="fileInput" name="files" multiple required>
+        <button type="submit">上传</button>
+    </form>
+    <div id="uploadResult"></div>
+
+    <div>
+        <input type="text" id="searchInput" placeholder="请输入文件名" style="width: 80%; padding: 10px; margin-bottom: 10px;" />
+        <button id="searchButton" style="padding: 10px;">搜索</button>
+    </div>
+
+    <!-- 文件列表 -->
+    <h2>文件列表</h2>
+    <div>
+        <input type="checkbox" id="selectAll" style="margin-bottom: 10px;"> 全选
+    </div>
+    <ul id="fileList" class="file-list"></ul>
+
+    <!-- 分页 -->
+    <div class="pagination">
+        <button id="prevPage">&laquo; 上一页</button>
+        <span id="pageInfo"></span>
+        <button id="nextPage">下一页 &raquo;</button>
+    </div>
+
+    <!-- 批量下载和删除 -->
+    <div class="batch-controls">
+        <button id="batchDownload">下载选定</button>
+        <button id="batchDelete">删除选定</button>
+    </div>
+    <div id="result"></div>
+</div>
+
+<script>
+    const filesPerPage = 10;
+    let currentPage = 1;
+    let totalFiles = 0;
+    let files = [];
+    let filteredFiles = []; // 用于存储过滤后的文件列表
+    let selectedFilesSet = new Set();
+    let allFilesSelected = false;
+
+    document.getElementById('uploadForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+        uploadFiles();
+    });
+
+    document.getElementById('searchButton').addEventListener('click', function() {
+        const searchTerm = document.getElementById('searchInput').value.trim();
+        if (searchTerm) {
+            searchFilesByName(searchTerm);
+        } else {
+            loadFiles(); // 如果搜索框为空，则加载所有文件
+        }
+    });
+
+    function uploadFiles() {
+        const formData = new FormData();
+        const fileInputs = document.getElementById('fileInput').files;
+
+        for (let file of fileInputs) {
+            formData.append('files', file);
+        }
+
+        fetch('http://localhost:8080/files/upload/batch', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.text())
+            .then(data => {
+                document.getElementById('uploadResult').textContent = data;
+                loadFiles();
+            })
+            .catch(error => {
+                document.getElementById('uploadResult').textContent = '上传失败。';
+                console.error('错误:', error);
+            });
+    }
+
+    function loadFiles() {
+        fetch('http://localhost:8080/files')
+            .then(response => response.json())
+            .then(data => {
+                files = data;
+                filteredFiles = [...files]; // 重置过滤后的文件为所有文件
+                totalFiles = files.length;
+                currentPage = 1; // 重置为第一页
+                displayFiles();
+                updatePagination();
+            })
+            .catch(error => {
+                console.error('获取文件列表错误:', error);
+            });
+    }
+
+    function searchFilesByName(name) {
+        filteredFiles = files.filter(file => file.includes(name)); // 根据文件名过滤
+        totalFiles = filteredFiles.length; // 更新总文件数
+        currentPage = 1; // 重置为第一页
+        displayFiles();
+        updatePagination();
+    }
+
+    function displayFiles() {
+        const fileList = document.getElementById('fileList');
+        fileList.innerHTML = '';
+
+        const start = (currentPage - 1) * filesPerPage;
+        const end = Math.min(start + filesPerPage, totalFiles);
+
+        for (let i = start; i < end; i++) {
+            const file = filteredFiles[i];
+            const li = document.createElement('li');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.value = file;
+            checkbox.classList.add('file-checkbox');
+            checkbox.checked = selectedFilesSet.has(file);
+
+            const downloadLink = document.createElement('a');
+            downloadLink.href = `http://localhost:8080/files/download/${file}`;
+            downloadLink.textContent = file;
+            downloadLink.download = file;
+
+            checkbox.addEventListener('change', function() {
+                toggleSelectFile(file, checkbox.checked);
+            });
+
+            li.appendChild(checkbox);
+            li.appendChild(downloadLink);
+            fileList.appendChild(li);
+        }
+    }
+
+    function toggleSelectFile(file, isSelected) {
+        if (isSelected) {
+            selectedFilesSet.add(file);
+        } else {
+            selectedFilesSet.delete(file);
+        }
+    }
+
+    function updatePagination() {
+        const totalPages = Math.ceil(totalFiles / filesPerPage);
+        document.getElementById('pageInfo').textContent = `第 ${currentPage} 页，共 ${totalPages} 页`;
+
+        document.getElementById('prevPage').disabled = currentPage === 1;
+        document.getElementById('nextPage').disabled = currentPage === totalPages;
+    }
+
+    document.getElementById('prevPage').addEventListener('click', function() {
+        if (currentPage > 1) {
+            currentPage--;
+            displayFiles(); // 显示过滤后的文件
+            updatePagination();
+        }
+    });
+
+    document.getElementById('nextPage').addEventListener('click', function() {
+        const totalPages = Math.ceil(totalFiles / filesPerPage);
+        if (currentPage < totalPages) {
+            currentPage++;
+            displayFiles(); // 显示过滤后的文件
+            updatePagination();
+        }
+    });
+
+    document.getElementById('batchDownload').addEventListener('click', function() {
+        if (selectedFilesSet.size > 0) {
+            downloadSelectedFiles();
+        } else {
+            alert('请选择要下载的文件。');
+        }
+    });
+
+    function downloadSelectedFiles() {
+        const selectedFiles = Array.from(selectedFilesSet);
+        const url = new URL('http://localhost:8080/files/download/batch');
+        url.search = new URLSearchParams(selectedFiles.map(file => ['filenames', file]));
+
+        fetch(url)
+            .then(response => response.blob())
+            .then(blob => {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'files.zip';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(a.href);
+            })
+            .catch(error => {
+                console.error('下载文件错误:', error);
+            });
+    }
+
+    document.getElementById('batchDelete').addEventListener('click', function() {
+        if (selectedFilesSet.size > 0) {
+            if (confirm('确定要删除选定的文件吗？')) {
+                deleteSelectedFiles();
+            }
+        } else {
+            alert('请选择要删除的文件。');
+        }
+    });
+
+    function deleteSelectedFiles() {
+        const selectedFiles = Array.from(selectedFilesSet);
+        selectedFiles.forEach(file => {
+            fetch(`http://localhost:8080/files/delete/${file}`, {
+                method: 'DELETE'
+            })
+                .then(response => response.text())
+                .then(data => {
+                    console.log(data);
+                    selectedFilesSet.delete(file);
+                    loadFiles();
+                })
+                .catch(error => {
+                    console.error('删除文件错误:', error);
+                });
+        });
+    }
+    // function deleteSelectedFiles() {
+    //     const selectedFiles = Array.from(selectedFilesSet); // selectedFilesSet 应该存储的是文件 ID
+    //     selectedFiles.forEach(fileId => {
+    //         fetch(`http://localhost:8080/files/delete/${fileId}`, {
+    //             method: 'DELETE'
+    //         })
+    //             .then(response => response.text())
+    //             .then(data => {
+    //                 console.log(data); // 打印删除的结果信息
+    //                 selectedFilesSet.delete(fileId); // 从选中集合中删除已删除的文件 ID
+    //                 loadFiles(); // 重新加载文件列表
+    //             })
+    //             .catch(error => {
+    //                 console.error('删除文件错误:', error);
+    //             });
+    //     });
+    // }
+
+
+    document.getElementById('selectAll').addEventListener('change', function(event) {
+        allFilesSelected = event.target.checked;
+        selectAllFiles(allFilesSelected);
+    });
+
+    function selectAllFiles(isChecked) {
+        // 更新所有可见文件复选框
+        const checkboxes = document.querySelectorAll('.file-checkbox');
+        for (const checkbox of checkboxes) {
+            checkbox.checked = isChecked;
+            toggleSelectFile(checkbox.value, isChecked);
+        }
+
+        // 选择或取消选择所有文件
+        if (isChecked) {
+            filteredFiles.forEach(file => selectedFilesSet.add(file)); // 选择过滤后的文件
+        } else {
+            selectedFilesSet.clear();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadFiles);
+</script>
+</body>
+</html>
